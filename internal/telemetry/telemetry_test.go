@@ -193,3 +193,23 @@ func TestUserInputDoesNotPolluteDuration(t *testing.T) {
 		t.Fatalf("expected untimed step before USER_INPUT, got dur=%d tps=%.1f timedOut=%d", st.LastDurMs, st.LastTPS, st.SessTimedOut)
 	}
 }
+
+
+func TestAdvisorBadgeShowsArmedOnFreshSession(t *testing.T) {
+	advDir := t.TempDir()
+	t.Setenv("AGY_ADVISOR_DIR", advDir)
+	if err := os.WriteFile(filepath.Join(advDir, "config.json"), []byte(`{"enabled":true,"advisor_name":"Opus"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	got := formatAdvisorBadge("", 0)
+	if !strings.Contains(got, "◎ Opus") {
+		t.Fatalf("expected armed badge containing '◎ Opus' on fresh session, got %q", got)
+	}
+
+	// Disabled advisor must hide the badge.
+	_ = os.WriteFile(filepath.Join(advDir, "config.json"), []byte(`{"enabled":false,"advisor_name":"Opus"}`), 0o644)
+	if got := formatAdvisorBadge("conv-1", 0); got != "" {
+		t.Fatalf("expected empty badge when disabled, got %q", got)
+	}
+}

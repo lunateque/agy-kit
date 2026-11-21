@@ -1194,10 +1194,12 @@ type advisorBadgeFile struct {
 	UpdatedMs  int64  `json:"updated_ms"`
 }
 
+type advisorConfigLite struct {
+	Enabled     bool   `json:"enabled"`
+	AdvisorName string `json:"advisor_name"`
+}
+
 func formatAdvisorBadge(convID string, tier int) string {
-	if convID == "" {
-		return ""
-	}
 	advDir := strings.TrimSpace(os.Getenv("AGY_ADVISOR_DIR"))
 	if advDir == "" {
 		home, err := os.UserHomeDir()
@@ -1206,18 +1208,46 @@ func formatAdvisorBadge(convID string, tier int) string {
 		}
 		advDir = filepath.Join(home, ".agy-advisor")
 	}
-	badgePath := filepath.Join(advDir, "convs", safeID(convID), "badge.json")
-	data, err := fsutil.ReadFileShared(badgePath)
-	if err != nil {
+
+	// Read global advisor config first so disabled hides the badge immediately and
+	// fresh sessions (before first message / before convID is assigned) still show armed state.
+	cfgData, cfgErr := fsutil.ReadFileShared(filepath.Join(advDir, "config.json"))
+	if cfgErr != nil {
 		return ""
 	}
+	var acfg advisorConfigLite
+	if json.Unmarshal(cfgData, &acfg) != nil || !acfg.Enabled {
+		return ""
+	}
+	defaultName := acfg.AdvisorName
+	if defaultName == "" {
+		defaultName = "Opus"
+	}
+
 	var b advisorBadgeFile
-	if json.Unmarshal(data, &b) != nil || b.V != 1 || b.Status == "disabled" {
+	hasConvBadge := false
+	if convID != "" {
+		badgePath := filepath.Join(advDir, "convs", safeID(convID), "badge.json")
+		if data, err := fsutil.ReadFileShared(badgePath); err == nil {
+			if json.Unmarshal(data, &b) == nil && b.V == 1 {
+				hasConvBadge = true
+			}
+		}
+	}
+
+	if !hasConvBadge {
+		// Armed & standing by for first coding turn.
+		if tier >= 2 {
+			return fmt.Sprintf("%s◎%s", cPurple, cReset)
+		}
+		return fmt.Sprintf("%s◎ %s%s", cPurple, defaultName, cReset)
+	}
+	if b.Status == "disabled" {
 		return ""
 	}
 	name := b.Advisor
 	if name == "" {
-		name = "adv"
+		name = defaultName
 	}
 	status := b.Status
 	// Never display stuck "reviewing" forever if a background worker died mid-call.
@@ -1244,9 +1274,9 @@ func formatAdvisorBadge(convID string, tier int) string {
 			return fmt.Sprintf("%s◉ %s:%d%s", cGreen, name, b.NotesCount, cReset)
 		}
 		if tier >= 2 {
-			return fmt.Sprintf("%s◎%s", cDim, cReset)
+			return fmt.Sprintf("%s◎%s", cPurple, cReset)
 		}
-		return fmt.Sprintf("%s◎ %s%s", cDim, name, cReset)
+		return fmt.Sprintf("%s◎ %s%s", cPurple, name, cReset)
 	}
 }
 
