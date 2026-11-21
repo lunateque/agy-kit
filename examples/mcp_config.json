@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "agy-bridge": {
+      "command": "C:\\Users\\Anek\\agy-kit\\bin\\agy-kit.exe",
+      "args": ["bridge"]
+    }
+  }
+}
