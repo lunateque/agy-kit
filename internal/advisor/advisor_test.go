@@ -278,3 +278,53 @@ func TestDiscoverWatchdogOptInAndSafeBounds(t *testing.T) {
 		t.Fatalf("expected root before leaf with allowProject=true, got rootIdx=%d leafIdx=%d", rootIdx, leafIdx)
 	}
 }
+
+
+func TestWorkerAutoRotatesSessionAtMaxCacheTokens(t *testing.T) {
+	t.Setenv("AGY_ADVISOR_DIR", t.TempDir())
+	projDir := t.TempDir()
+	convID := "conv-rotate-1"
+	paths := GetConvPaths(convID)
+	_ = paths.EnsureDirs()
+	_ = SaveCursor(paths.Cursor, CursorState{V: StateSchemaVersion, ConversationID: convID, CWD: projDir, SessionEpoch: 1})
+
+	var seenSessionDirs []string
+	var seenHasSession []bool
+	mockRunner := func(ctx context.Context, req RunRequest) (*RunResult, error) {
+		seenSessionDirs = append(seenSessionDirs, req.SessionDir)
+		seenHasSession = append(seenHasSession, req.HasSession)
+		return &RunResult{
+			Response:        "SILENT",
+			SessionID:       "sess-x",
+			CacheReadTokens: 200_000, // exceeds MaxCacheTokens=180_000
+		}, nil
+	}
+
+	cfg := DefaultConfig()
+	cfg.MaxCacheTokens = 180_000
+
+	// Turn 1: fresh session r0, returns 200k cache_read.
+	_ = EnqueuePending(paths, PendingBatch{Seq: 1, SessionEpoch: 1, FromStep: 1, ToStep: 2, CWD: projDir, DeltaText: "step 1"})
+	if err := RunWorker(context.Background(), convID, cfg, mockRunner); err != nil {
+		t.Fatal(err)
+	}
+	// Turn 2: must auto-rotate to r1 with HasSession=false!
+	_ = EnqueuePending(paths, PendingBatch{Seq: 2, SessionEpoch: 1, FromStep: 3, ToStep: 4, CWD: projDir, DeltaText: "step 2"})
+	if err := RunWorker(context.Background(), convID, cfg, mockRunner); err != nil {
+		t.Fatal(err)
+	}
+
+	if len(seenSessionDirs) != 2 {
+		t.Fatalf("expected 2 runs, got %d", len(seenSessionDirs))
+	}
+	if seenSessionDirs[0] == seenSessionDirs[1] {
+		t.Fatalf("expected rotated session dir, both were %s", seenSessionDirs[0])
+	}
+	if seenHasSession[0] || seenHasSession[1] {
+		t.Fatalf("expected both turns to start fresh session on rotation, got %v", seenHasSession)
+	}
+	meta, err := LoadMeta(paths.Meta)
+	if err != nil || meta.SessionRotation != 1 {
+		t.Fatalf("expected SessionRotation=1, got %+v (err=%v)", meta, err)
+	}
+}

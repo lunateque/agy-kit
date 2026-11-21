@@ -22,6 +22,7 @@ type Config struct {
 	MaxDeltaBytes        int    `json:"max_delta_bytes"`        // cap formatted delta size per batch (default 48KB)
 	ShowCardInChat       bool   `json:"show_card_in_chat"`      // render metadata.user_markdown advisory cards in agy UI
 	AllowProjectWatchdog bool   `json:"allow_project_watchdog"` // opt-in for repo-level WATCHDOG.md (default false for prompt-injection safety)
+	MaxCacheTokens       int64  `json:"max_cache_tokens"`       // auto-rotate advisor session once cache_read reaches this threshold (default 180000; 0 disables)
 }
 
 func DefaultConfig() Config {
@@ -37,6 +38,7 @@ func DefaultConfig() Config {
 		MaxDeltaBytes:        48 * 1024,
 		ShowCardInChat:       true,
 		AllowProjectWatchdog: false,
+		MaxCacheTokens:       180_000,
 	}
 }
 
@@ -95,6 +97,9 @@ func LoadConfig() Config {
 	}
 	if cfg.MaxDeltaBytes < 4096 {
 		cfg.MaxDeltaBytes = 48 * 1024
+	}
+	if cfg.MaxCacheTokens < 0 {
+		cfg.MaxCacheTokens = 0
 	}
 	return cfg
 }

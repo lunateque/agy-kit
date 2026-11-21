@@ -112,6 +112,7 @@ type WorkerMeta struct {
 	Model               string            `json:"model"`
 	ScopeDir            string            `json:"scope_dir,omitempty"`
 	SessionEpoch        int               `json:"session_epoch"`
+	SessionRotation     int               `json:"session_rotation,omitempty"`
 	AdvisorSessionID    string            `json:"advisor_session_id,omitempty"`
 	HasSession          bool              `json:"has_session"`
 	ReviewedThroughStep int               `json:"reviewed_through_step"`

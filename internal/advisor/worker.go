@@ -144,9 +144,11 @@ func drainPendingLoop(ctx context.Context, convID string, paths ConvPaths, cfg C
 		// (Claude stores sessions per project dir, so --resume breaks across dirs).
 		if meta.SessionEpoch != cur.SessionEpoch || (meta.ScopeDir != "" && !strings.EqualFold(filepath.Clean(meta.ScopeDir), filepath.Clean(scopeDir))) {
 			meta.SessionEpoch = cur.SessionEpoch
+			meta.SessionRotation = 0
 			meta.ScopeDir = scopeDir
 			meta.HasSession = false
 			meta.AdvisorSessionID = ""
+			meta.LastCacheRead = 0
 			meta.ReviewedThroughStep = -1
 			meta.SeenKeys = map[string]string{}
 		}
@@ -154,7 +156,29 @@ func drainPendingLoop(ctx context.Context, convID string, paths ConvPaths, cfg C
 			meta.ScopeDir = scopeDir
 		}
 
-		epochSessionDir := filepath.Join(paths.Sessions, fmt.Sprintf("epoch-%d-%s", meta.SessionEpoch, shortPathHash(scopeDir)))
+		// Auto-rotate advisor session once cached context exceeds max_cache_tokens
+		// so long coding sessions don't balloon Anthropic cache_read costs.
+		// Keeps SeenKeys intact so previously raised issues are not re-emitted.
+		promptText := coalesced.DeltaText
+		if meta.HasSession && cfg.MaxCacheTokens > 0 && meta.LastCacheRead >= cfg.MaxCacheTokens {
+			prevCache := meta.LastCacheRead
+			meta.SessionRotation++
+			meta.HasSession = false
+			meta.AdvisorSessionID = ""
+			meta.LastCacheRead = 0
+			AppendHistory(paths, HistoryRecord{
+				Timestamp: time.Now().Format(time.RFC3339),
+				Epoch:     meta.SessionEpoch,
+				FromStep:  coalesced.FromStep,
+				ToStep:    coalesced.ToStep,
+				Severity:  "info",
+				Key:       "auto-rotate",
+				Note:      fmt.Sprintf("rotated advisor session r%d (cache %d >= %d)", meta.SessionRotation, prevCache, cfg.MaxCacheTokens),
+			})
+			promptText = fmt.Sprintf("[Advisor session auto-rotated to keep context lean; resuming review from step %d]\n\n%s", coalesced.FromStep, promptText)
+		}
+
+		epochSessionDir := filepath.Join(paths.Sessions, fmt.Sprintf("epoch-%d-r%d-%s", meta.SessionEpoch, meta.SessionRotation, shortPathHash(scopeDir)))
 		_ = os.MkdirAll(epochSessionDir, 0o755)
 		sysPromptPath := filepath.Join(epochSessionDir, "system.md")
 		if !meta.HasSession {
@@ -175,7 +199,7 @@ func drainPendingLoop(ctx context.Context, convID string, paths ConvPaths, cfg C
 			SystemPromptPath: sysPromptPath,
 			HasSession:       meta.HasSession,
 			AdvisorSessionID: meta.AdvisorSessionID,
-			Prompt:           coalesced.DeltaText,
+			Prompt:           promptText,
 			TimeoutSec:       cfg.CallTimeoutSec,
 		})
 

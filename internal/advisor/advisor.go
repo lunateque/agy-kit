@@ -425,8 +425,8 @@ func setEnabled(enabled bool) int {
 
 func runStatus(args []string) int {
 	cfg := LoadConfig()
-	fmt.Printf("Advisor: enabled=%v backend=%s model=%s thinking=%s stop_wait=%ds project_watchdog=%v\n",
-		cfg.Enabled, cfg.Backend, cfg.Model, cfg.Thinking, cfg.StopWaitSec, cfg.AllowProjectWatchdog)
+	fmt.Printf("Advisor: enabled=%v backend=%s model=%s thinking=%s stop_wait=%ds max_cache=%d project_watchdog=%v\n",
+		cfg.Enabled, cfg.Backend, cfg.Model, cfg.Thinking, cfg.StopWaitSec, cfg.MaxCacheTokens, cfg.AllowProjectWatchdog)
 
 	convsDir := filepath.Join(BaseDir(), "convs")
 	entries, err := os.ReadDir(convsDir)
@@ -707,6 +707,13 @@ func runConfigCLI(args []string) int {
 				return 1
 			}
 			cfg.AllowProjectWatchdog = b
+		case "max_cache_tokens":
+			n, err := strconv.ParseInt(v, 10, 64)
+			if err != nil || n < 0 {
+				fmt.Fprintln(os.Stderr, "max_cache_tokens must be >= 0")
+				return 1
+			}
+			cfg.MaxCacheTokens = n
 		default:
 			fmt.Fprintln(os.Stderr, "unknown key:", k)
 			return 1
