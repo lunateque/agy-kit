@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"github.com/lunateque/agy-kit/internal/advisor"
+	"github.com/lunateque/agy-kit/internal/auth"
 	"github.com/lunateque/agy-kit/internal/bridge"
 	"github.com/lunateque/agy-kit/internal/telemetry"
 )
@@ -27,6 +28,8 @@ func main() {
 		code = telemetry.Run(append([]string{"stats"}, os.Args[2:]...))
 	case "bridge":
 		code = bridge.Run()
+	case "auth":
+		code = auth.Run(os.Args[2:])
 	case "advisor":
 		code = advisor.Run(os.Args[2:])
 	case "version", "--version", "-v":
@@ -50,6 +53,7 @@ Usage:
   agy-kit telemetry <hook|statusline|stats|config>   Telemetry hooks, stats, and statusline
   agy-kit statusline                                 Shorthand for 'telemetry statusline'
   agy-kit stats [today|all|last N]                   Shorthand for 'telemetry stats'
+  agy-kit auth <save|list|current|use|swap|reload>   Switch & auto-reload agy Google accounts
   agy-kit bridge                                     MCP stdio server (agy -> omp/claude)
   agy-kit advisor <hook|worker|status|enable|disable|reset|dump|doctor|config>
                                                      Shadow Opus advisor (omp-style)
